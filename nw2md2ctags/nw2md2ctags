@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+
+import re
+import sys
+
+__author__ = "Meik Tessmer"
+__email__ = "mtessmer@wiwi.uni-bielefeld.de"
+__version__ = "0.1.3"
+
+# markers of code chunk definitions
+open_mark = "<<"
+close_mark = ">>="
+doc_chunk_marker = "^@"
+
+# markers for headers
+header_1 = "#"
+header_2 = "##"
+header_3 = "###"
+
+class Tag:
+    """A tags file entry
+
+    """
+    filename = None
+
+    def __init__(self, name, kind, line, line_no):
+        self.name = name
+        self.kind = kind
+        self.line = line
+        self.line_no = line_no
+
+    def __repr__(self):
+ 	    return "{0}\t{1}\t/^{2}$/;\"\t{3}\tline:{4}".format(self.name, self.filename,
+                self.line, self.kind, self.line_no)
+ 
+def create_tag(line, line_no, kind):
+    # remove newline char
+    line = line[:-1]
+    if kind == "s":
+        # replace # with spaces
+        name = line.replace("#", ".")
+        return Tag(name, kind, line, line_no)
+    elif kind == "c":
+        return Tag(line, kind, line, line_no)
+    else:
+        # Error
+        return None
+
+def chunks(source):
+    """read lines from source and yield either code or doc chunks
+
+    """
+    in_code_chunk = False
+    line_no = 0
+    for line in source:
+        line_no += 1
+        # look for a code chunk definition
+        match = search_for_code_chunk_definition(line)
+        if match:
+            in_code_chunk = True
+            #chunk_name = match[0]
+            yield create_tag(line, line_no, "c")
+            continue
+        # is the a new doc chunk?
+        if contains_doc_chunk_header(line):
+            in_code_chunk = False
+
+        # check for markdown markup, only if we are in_code_chunk
+        if not in_code_chunk:
+            # search for headers
+            match = search_for_header(line)
+            if match and not in_code_chunk:
+                #yield Tag(line.strip(), "s")
+                yield create_tag(line, line_no, "s")
+                continue
+
+            # maybe search for more markup?
+            # ...
+
+def search_for_code_chunk_definition(line):
+    """look for code chunk definition and return chunk name"""
+
+    # look for annotated code chunk header, e.g. <<code>>= (make)
+    match = re.match(open_mark + "([^>]+)" + close_mark + "\s*\((\w+)\)", line)
+    if not match:
+        # ok, use normal noweb syntax
+        match = re.match(open_mark + "([^>]+)" + close_mark, line)
+        if match:
+            return (match.group(1), None)
+        else:
+            return None
+    else:
+        return (match.group(1), match.group(2))
+
+def contains_doc_chunk_header(line):
+    match = re.match(doc_chunk_marker + "[ ]?", line)
+    if match:
+        return True
+    else:
+        return False
+
+def search_for_header(line):
+    for marker in [header_1, header_2, header_3]:
+        match = re.match(marker + " \s*(.+)\s*$", line)
+        if match:
+            return (match.group(1))
+
+    return None
+
+def main():
+    Tag.filename = sys.argv[1]
+
+    out = []
+    with open(Tag.filename, "r") as handle:
+        for chunk in chunks(handle):
+            out.append(str(chunk))
+
+    #for line in sorted(out):
+    for line in out:
+        print(line)
+
+
+if __name__ == "__main__":
+    main()
+
